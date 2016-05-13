@@ -17,11 +17,13 @@ import org.smssecure.smssecure.database.model.SmsMessageRecord;
 import org.smssecure.smssecure.jobs.requirements.MasterSecretRequirement;
 import org.smssecure.smssecure.notifications.MessageNotifier;
 import org.smssecure.smssecure.service.KeyCachingService;
+import org.smssecure.smssecure.service.XmppService;
 import org.smssecure.smssecure.sms.IncomingEncryptedMessage;
 import org.smssecure.smssecure.sms.IncomingEndSessionMessage;
 import org.smssecure.smssecure.sms.IncomingKeyExchangeMessage;
 import org.smssecure.smssecure.sms.IncomingPreKeyBundleMessage;
 import org.smssecure.smssecure.sms.IncomingTextMessage;
+import org.smssecure.smssecure.sms.IncomingXmppExchangeMessage;
 import org.smssecure.smssecure.sms.MessageSender;
 import org.smssecure.smssecure.sms.OutgoingKeyExchangeMessage;
 import org.smssecure.smssecure.util.SilencePreferences;
@@ -75,6 +77,7 @@ public class SmsDecryptJob extends MasterSecretJob {
       else if (message.isPreKeyBundle())  handlePreKeyWhisperMessage(masterSecret, messageId, threadId, (IncomingPreKeyBundleMessage) message);
       else if (message.isKeyExchange())   handleKeyExchangeMessage(masterSecret, messageId, threadId, (IncomingKeyExchangeMessage) message);
       else if (message.isEndSession())    handleSecureMessage(masterSecret, messageId, threadId, message);
+      else if (message.isXmppExchange())  handleXmppExchangeMessage(masterSecret, messageId, threadId, (IncomingXmppExchangeMessage) message);
       else                                database.updateMessageBody(masterSecret, messageId, message.getMessageBody());
 
       MessageNotifier.updateNotification(context, masterSecret);
@@ -154,7 +157,7 @@ public class SmsDecryptJob extends MasterSecretJob {
         SecurityEvent.broadcastSecurityUpdateEvent(context, threadId);
 
         if (response != null) {
-          MessageSender.send(context, masterSecret, response, threadId, true);
+          MessageSender.send(context, masterSecret, response, threadId, false);
         }
       } catch (InvalidVersionException e) {
         Log.w(TAG, e);
@@ -172,6 +175,22 @@ public class SmsDecryptJob extends MasterSecretJob {
         Log.w(TAG, e);
       }
     }
+  }
+
+  private void handleXmppExchangeMessage(MasterSecret masterSecret, long messageId, long threadId,
+                                         IncomingXmppExchangeMessage message)
+     throws NoSessionException, DuplicateMessageException, InvalidMessageException, LegacyMessageException
+  {
+    EncryptingSmsDatabase database = DatabaseFactory.getEncryptingSmsDatabase(context);
+
+    SmsCipher           cipher  = new SmsCipher(new SilenceAxolotlStore(context, masterSecret));
+    IncomingTextMessage xmppJid = cipher.decrypt(context, message);
+
+    database.markAsXmppExchange(messageId);
+
+    XmppService.getInstance().subscribe(xmppJid.getMessageBody());
+
+    SecurityEvent.broadcastSecurityUpdateEvent(context, threadId);
   }
 
   private String getAsymmetricDecryptedBody(MasterSecret masterSecret, String body)
@@ -207,6 +226,8 @@ public class SmsDecryptJob extends MasterSecretJob {
       return new IncomingPreKeyBundleMessage(message, message.getMessageBody());
     } else if (record.isKeyExchange()) {
       return new IncomingKeyExchangeMessage(message, message.getMessageBody());
+    } else if (record.isXmppExchange()) {
+      return new IncomingXmppExchangeMessage(message, message.getMessageBody());
     } else if (record.isSecure()) {
       return new IncomingEncryptedMessage(message, message.getMessageBody());
     }

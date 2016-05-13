@@ -6,6 +6,7 @@ import org.smssecure.smssecure.protocol.EndSessionWirePrefix;
 import org.smssecure.smssecure.protocol.KeyExchangeWirePrefix;
 import org.smssecure.smssecure.protocol.PrekeyBundleWirePrefix;
 import org.smssecure.smssecure.protocol.SecureMessageWirePrefix;
+import org.smssecure.smssecure.protocol.XmppExchangeWirePrefix;
 import org.smssecure.smssecure.protocol.WirePrefix;
 import org.smssecure.smssecure.util.Base64;
 import org.smssecure.smssecure.util.Conversions;
@@ -22,10 +23,11 @@ public class MultipartSmsTransportMessage {
   public static final int MULTI_MESSAGE_MULTIPART_OVERHEAD       = 3;
   public static final int FIRST_MULTI_MESSAGE_MULTIPART_OVERHEAD = 2;
 
-  public static final int WIRETYPE_SECURE      = 1;
-  public static final int WIRETYPE_KEY         = 2;
-  public static final int WIRETYPE_PREKEY      = 3;
-  public static final int WIRETYPE_END_SESSION = 4;
+  public static final int WIRETYPE_SECURE        = 1;
+  public static final int WIRETYPE_KEY           = 2;
+  public static final int WIRETYPE_PREKEY        = 3;
+  public static final int WIRETYPE_END_SESSION   = 4;
+  public static final int WIRETYPE_XMPP_EXCHANGE = 5;
 
   private static final int VERSION_OFFSET    = 0;
   private static final int MULTIPART_OFFSET  = 1;
@@ -42,6 +44,7 @@ public class MultipartSmsTransportMessage {
     if      (WirePrefix.isEncryptedMessage(message.getMessageBody())) wireType = WIRETYPE_SECURE;
     else if (WirePrefix.isPreKeyBundle(message.getMessageBody()))     wireType = WIRETYPE_PREKEY;
     else if (WirePrefix.isEndSession(message.getMessageBody()))       wireType = WIRETYPE_END_SESSION;
+    else if (WirePrefix.isXmppExchange(message.getMessageBody()))     wireType = WIRETYPE_XMPP_EXCHANGE;
     else                                                              wireType = WIRETYPE_KEY;
 
     Log.w(TAG, "Decoded message with version: " + getCurrentVersion());
@@ -151,7 +154,7 @@ public class MultipartSmsTransportMessage {
     return message;
   }
 
-  public static ArrayList<String> getEncoded(OutgoingTextMessage message, byte identifier)
+  public static ArrayList<String> getEncoded(OutgoingTextMessage message, byte identifier, boolean isXmpp)
   {
     try {
       byte[] decoded = Base64.decodeWithoutPadding(message.getMessageBody());
@@ -162,10 +165,11 @@ public class MultipartSmsTransportMessage {
       if      (message.isKeyExchange())  prefix = new KeyExchangeWirePrefix();
       else if (message.isPreKeyBundle()) prefix = new PrekeyBundleWirePrefix();
       else if (message.isEndSession())   prefix = new EndSessionWirePrefix();
+      else if (message.isXmppExchange()) prefix = new XmppExchangeWirePrefix();
       else                               prefix = new SecureMessageWirePrefix();
 
-      if (count == 1) return getSingleEncoded(decoded, prefix);
-      else            return getMultiEncoded(decoded, prefix, count, identifier);
+      if (count == 1 || isXmpp) return getSingleEncoded(decoded, prefix);
+      else                      return getMultiEncoded(decoded, prefix, count, identifier);
 
     } catch (IOException e) {
       throw new AssertionError(e);

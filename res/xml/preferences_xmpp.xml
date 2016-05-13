@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory android:title="@string/preferences__xmpp">
+        <org.smssecure.smssecure.components.SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="pref_xmpp_enaled"
+            android:title="@string/preferences__enable_xmpp_messages" />
+
+        <Preference android:key="pref_xmpp_status"
+                    android:title="@string/preferences__xmpp_status"
+                    android:dependency="pref_xmpp_enaled" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

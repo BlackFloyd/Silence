@@ -40,11 +40,11 @@ import org.smssecure.smssecure.preferences.AppearancePreferenceFragment;
 import org.smssecure.smssecure.preferences.NotificationsPreferenceFragment;
 import org.smssecure.smssecure.preferences.SmsMmsPreferenceFragment;
 import org.smssecure.smssecure.preferences.ChatsPreferenceFragment;
+import org.smssecure.smssecure.preferences.XmppPreferenceFragment;
 import org.smssecure.smssecure.service.KeyCachingService;
 import org.smssecure.smssecure.util.Dialogs;
 import org.smssecure.smssecure.util.DynamicLanguage;
 import org.smssecure.smssecure.util.DynamicTheme;
-import org.smssecure.smssecure.util.task.ProgressDialogAsyncTask;
 import org.smssecure.smssecure.util.ResUtil;
 import org.smssecure.smssecure.util.SilencePreferences;
 import org.whispersystems.libaxolotl.util.guava.Optional;
@@ -68,6 +68,7 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActionBarA
   private static final String PREFERENCE_CATEGORY_APP_PROTECTION = "preference_category_app_protection";
   private static final String PREFERENCE_CATEGORY_APPEARANCE     = "preference_category_appearance";
   private static final String PREFERENCE_CATEGORY_CHATS          = "preference_category_chats";
+  private static final String PREFERENCE_CATEGORY_XMPP           = "preference_category_xmpp";
   private static final String PREFERENCE_CATEGORY_ADVANCED       = "preference_category_advanced";
   private static final String PREFERENCE_ABOUT                   = "preference_about";
 
@@ -153,6 +154,8 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActionBarA
         .setOnPreferenceClickListener(new CategoryClickListener(masterSecret, PREFERENCE_CATEGORY_APPEARANCE));
       this.findPreference(PREFERENCE_CATEGORY_CHATS)
         .setOnPreferenceClickListener(new CategoryClickListener(masterSecret, PREFERENCE_CATEGORY_CHATS));
+      this.findPreference(PREFERENCE_CATEGORY_XMPP)
+        .setOnPreferenceClickListener(new CategoryClickListener(masterSecret, PREFERENCE_CATEGORY_XMPP));
       this.findPreference(PREFERENCE_CATEGORY_ADVANCED)
         .setOnPreferenceClickListener(new CategoryClickListener(masterSecret, PREFERENCE_CATEGORY_ADVANCED));
     }
@@ -175,6 +178,8 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActionBarA
           .setSummary(AppearancePreferenceFragment.getSummary(getActivity()));
       this.findPreference(PREFERENCE_CATEGORY_CHATS)
           .setSummary(ChatsPreferenceFragment.getSummary(getActivity()));
+      this.findPreference(PREFERENCE_CATEGORY_XMPP)
+          .setSummary(XmppPreferenceFragment.getSummary(getActivity()));
 
       String version = String.format(this.getString(R.string.preferences__about_version),  BuildConfig.VERSION_NAME);
       String buildID = String.format(this.getString(R.string.preferences__about_build_id), BuildConfig.BUILD_GIT_COMMIT);
@@ -213,6 +218,9 @@ public class ApplicationPreferencesActivity extends PassphraseRequiredActionBarA
           break;
         case PREFERENCE_CATEGORY_CHATS:
           fragment = new ChatsPreferenceFragment();
+          break;
+        case PREFERENCE_CATEGORY_XMPP:
+          fragment = new XmppPreferenceFragment();
           break;
         case PREFERENCE_CATEGORY_ADVANCED:
           fragment = new AdvancedPreferenceFragment();

@@ -62,6 +62,7 @@ public class ShareActivity extends PassphraseRequiredActionBarActivity
   private Uri          resolvedExtra;
   private String       mimeType;
   private boolean      isPassingAlongMedia;
+  private String       xmppAddress;
 
   @Override
   protected void onPreCreate() {
@@ -79,6 +80,8 @@ public class ShareActivity extends PassphraseRequiredActionBarActivity
 
     initFragment(R.id.drawer_layout, new ShareFragment(), masterSecret);
     initializeMedia();
+    Uri xmppUri = getIntent().getData();
+    if (xmppUri != null) xmppAddress = xmppUri.getEncodedFragment();
   }
 
   @Override
@@ -157,6 +160,11 @@ public class ShareActivity extends PassphraseRequiredActionBarActivity
   }
 
   private void createConversation(long threadId, Recipients recipients, int distributionType) {
+    if (xmppAddress != null && !xmppAddress.equals("")) {
+      Log.w(TAG, "Adding " + xmppAddress + " to " + recipients.getPrimaryRecipient().getName());
+      recipients.getPrimaryRecipient().setXmppJid(xmppAddress);
+    }
+
     final Intent intent = getBaseShareIntent(ConversationActivity.class);
     intent.putExtra(ConversationActivity.RECIPIENTS_EXTRA, recipients.getIds());
     intent.putExtra(ConversationActivity.THREAD_ID_EXTRA, threadId);

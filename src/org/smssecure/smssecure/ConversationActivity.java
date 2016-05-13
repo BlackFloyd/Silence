@@ -101,10 +101,12 @@ import org.smssecure.smssecure.recipients.RecipientFormattingException;
 import org.smssecure.smssecure.recipients.Recipients;
 import org.smssecure.smssecure.recipients.Recipients.RecipientsModifiedListener;
 import org.smssecure.smssecure.service.KeyCachingService;
+import org.smssecure.smssecure.service.XmppService;
 import org.smssecure.smssecure.sms.MessageSender;
 import org.smssecure.smssecure.sms.OutgoingEncryptedMessage;
 import org.smssecure.smssecure.sms.OutgoingEndSessionMessage;
 import org.smssecure.smssecure.sms.OutgoingTextMessage;
+import org.smssecure.smssecure.sms.OutgoingXmppExchangeMessage;
 import org.smssecure.smssecure.util.concurrent.AssertedSuccessListener;
 import org.smssecure.smssecure.util.CharacterCalculator.CharacterState;
 import org.smssecure.smssecure.util.Dialogs;
@@ -119,8 +121,11 @@ import org.smssecure.smssecure.util.ViewUtil;
 import org.smssecure.smssecure.util.concurrent.ListenableFuture;
 import org.smssecure.smssecure.util.concurrent.SettableFuture;
 import org.smssecure.smssecure.util.dualsim.SubscriptionManagerCompat;
+import org.smssecure.smssecure.util.XmppUtil;
 import org.whispersystems.libaxolotl.InvalidMessageException;
 import org.whispersystems.libaxolotl.util.guava.Optional;
+
+import org.jivesoftware.smack.packet.Presence;
 
 import java.io.IOException;
 import java.util.List;
@@ -173,6 +178,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private   AttachmentTypeSelectorAdapter attachmentAdapter;
   private   AttachmentManager             attachmentManager;
   private   BroadcastReceiver             securityUpdateReceiver;
+  private   BroadcastReceiver             xmppUpdateReceiver;
   private   BroadcastReceiver             groupUpdateReceiver;
   private   EmojiDrawer                   emojiDrawer;
   private   EmojiToggle                   emojiToggle;
@@ -279,6 +285,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     saveDraft();
     if (recipients != null) recipients.removeListener(this);
     if (securityUpdateReceiver != null) unregisterReceiver(securityUpdateReceiver);
+    if (xmppUpdateReceiver != null) unregisterReceiver(xmppUpdateReceiver);
     if (groupUpdateReceiver != null) unregisterReceiver(groupUpdateReceiver);
     super.onDestroy();
   }
@@ -324,6 +331,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     if (isSingleConversation() && isEncryptedConversation) {
       inflater.inflate(R.menu.conversation_secure_identity, menu);
+      if (SilencePreferences.isXmppRegistered(this)) inflater.inflate(R.menu.conversation_secure_xmpp, menu.findItem(R.id.menu_security).getSubMenu());
       inflater.inflate(R.menu.conversation_secure_sms, menu.findItem(R.id.menu_security).getSubMenu());
     } else if (isSingleConversation()) {
       inflater.inflate(R.menu.conversation_insecure_no_push, menu);
@@ -372,6 +380,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     case R.id.menu_view_media:                handleViewMedia();                                 return true;
     case R.id.menu_add_to_contacts:           handleAddToContacts();                             return true;
     case R.id.menu_start_secure_session:      handleStartSecureSession();                        return true;
+    case R.id.menu_display_xmpp_address:      handleDisplayXmppAddress();                        return true;
+    case R.id.menu_start_xmpp_exchange:       handleStartXmppExchange();                         return true;
     case R.id.menu_abort_session:             handleAbortSecureSession();                        return true;
     case R.id.menu_verify_identity:           handleVerifyIdentity();                            return true;
     case R.id.menu_group_recipients:          handleDisplayGroupRecipients();                    return true;
@@ -520,6 +530,54 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     builder.setNegativeButton(R.string.no, null);
     builder.show();
+  }
+
+  private void handleDisplayXmppAddress() {
+    new XmppAddressDialog(this).show();
+  }
+
+  private void handleStartXmppExchange() {
+    if (getRecipients() == null) {
+      Toast.makeText(this, getString(R.string.ConversationActivity_invalid_recipient),
+                     Toast.LENGTH_LONG).show();
+      return;
+    }
+
+    if (TelephonyUtil.isMyPhoneNumber(this, recipients.getPrimaryRecipient().getNumber())) {
+      Toast.makeText(this, getString(R.string.ConversationActivity_recipient_self),
+              Toast.LENGTH_LONG).show();
+      return;
+    }
+
+    final Recipients recipients = getRecipients();
+    final Recipient recipient   = recipients.getPrimaryRecipient();
+    final int subscriptionId    = sendButton.getSelectedTransport().getSimSubscriptionId().or(-1);
+
+    OutgoingXmppExchangeMessage xmppExchangeMessage =
+        new OutgoingXmppExchangeMessage(new OutgoingTextMessage(getRecipients(),
+                                                                SilencePreferences.getXmppUsername(this) + "@" + SilencePreferences.getXmppHostname(this),
+                                                                subscriptionId));
+
+    final Context context = getApplicationContext();
+
+    new AsyncTask<OutgoingXmppExchangeMessage, Void, Long>() {
+      @Override
+      protected Long doInBackground(OutgoingXmppExchangeMessage... messages) {
+        return MessageSender.send(context, masterSecret, messages[0], threadId, false);
+      }
+
+      @Override
+      protected void onPostExecute(Long threadId) {
+        long allocatedThreadId;
+        if (threadId == -1) {
+          allocatedThreadId = DatabaseFactory.getThreadDatabase(getApplicationContext()).getThreadIdFor(recipients);
+        } else {
+          allocatedThreadId = threadId;
+        }
+        Log.w(TAG, "Refreshing thread "+allocatedThreadId+"...");
+        sendComplete(allocatedThreadId);
+      }
+    }.execute(xmppExchangeMessage);
   }
 
   private void handleAbortSecureSession() {
@@ -741,11 +799,28 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     }
 
     sendButton.resetAvailableTransports(isMediaMessage);
-    if (!isSecureSmsDestination      ) sendButton.disableTransport(Type.SECURE_SMS);
+    if (!isSecureSmsDestination){
+      sendButton.disableTransport(Type.SECURE_SMS);
+      sendButton.disableTransport(Type.SECURE_XMPP);
+      sendButton.disableTransport(Type.SECURE_XMPP_OFFLINE);
+    }
     if (recipients.isGroupRecipient()) sendButton.disableTransport(Type.INSECURE_SMS);
 
     if (isSecureSmsDestination) {
-      sendButton.setDefaultTransport(Type.SECURE_SMS);
+      if (primaryRecipient.getXmppJid() != null && XmppUtil.isXmppAvailable(this)) {
+        if (XmppService.getInstance().getRecipientPresence(primaryRecipient.getXmppJid()) == null ||
+           !XmppService.getInstance().getRecipientPresence(primaryRecipient.getXmppJid()).isAvailable()) {
+          sendButton.setDefaultTransport(Type.SECURE_SMS);
+          sendButton.disableTransport(Type.SECURE_XMPP);
+        } else {
+          sendButton.setDefaultTransport(Type.SECURE_XMPP);
+          sendButton.disableTransport(Type.SECURE_XMPP_OFFLINE);
+        }
+      } else {
+        sendButton.setDefaultTransport(Type.SECURE_SMS);
+        sendButton.disableTransport(Type.SECURE_XMPP);
+        sendButton.disableTransport(Type.SECURE_XMPP_OFFLINE);
+      }
     } else {
       sendButton.setDefaultTransport(Type.INSECURE_SMS);
     }
@@ -832,6 +907,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     sendButton.addOnTransportChangedListener(new OnTransportChangedListener() {
       @Override
       public void onChange(TransportOption newTransport, boolean manuallySelected) {
+        if (newTransport.getType() == Type.SECURE_XMPP_OFFLINE) {
+          Toast.makeText(ConversationActivity.this,
+                         R.string.ConversationActivity_recipient_is_offline_xmpp_messages_may_be_delayed,
+                         Toast.LENGTH_LONG).show();
+        }
         calculateCharactersRemaining();
         composeText.setTransport(newTransport);
         buttonToggle.getBackground().setColorFilter(newTransport.getBackgroundColor(), Mode.MULTIPLY);
@@ -897,6 +977,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         setBlockedUserState(recipients);
         setActionBarColor(recipients.getColor());
         updateRecipientPreferences();
+        initializeSecurity();
       }
     });
   }
@@ -908,10 +989,19 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         long eventThreadId = intent.getLongExtra("thread_id", -1);
 
         if (eventThreadId == threadId || eventThreadId == -2) {
-          initializeSecurity();
           updateRecipientPreferences();
+          initializeSecurity();
           calculateCharactersRemaining();
         }
+      }
+    };
+
+    xmppUpdateReceiver = new BroadcastReceiver() {
+      @Override
+      public void onReceive(Context context, Intent intent) {
+        initializeSecurity();
+        updateRecipientPreferences();
+        calculateCharactersRemaining();
       }
     };
 
@@ -932,6 +1022,9 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     registerReceiver(securityUpdateReceiver,
                      new IntentFilter(SecurityEvent.SECURITY_UPDATE_EVENT),
                      KeyCachingService.KEY_PERMISSION, null);
+
+    registerReceiver(xmppUpdateReceiver,
+                    new IntentFilter(XmppService.XMPP_CONNECTIVITY_EVENT));
 
     registerReceiver(groupUpdateReceiver,
                      new IntentFilter(GroupDatabase.DATABASE_UPDATE_ACTION));
@@ -1220,7 +1313,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     new AsyncTask<OutgoingMediaMessage, Void, Long>() {
       @Override
       protected Long doInBackground(OutgoingMediaMessage... messages) {
-        return MessageSender.send(context, masterSecret, messages[0], threadId, true);
+        return MessageSender.send(context, masterSecret, messages[0], threadId, false);
       }
 
       @Override
@@ -1247,7 +1340,8 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     new AsyncTask<OutgoingTextMessage, Void, Long>() {
       @Override
       protected Long doInBackground(OutgoingTextMessage... messages) {
-        return MessageSender.send(context, masterSecret, messages[0], threadId, true);
+        boolean isXmpp = isXmppType(sendButton.getSelectedTransport().getType());
+        return MessageSender.send(context, masterSecret, messages[0], threadId, isXmpp);
       }
 
       @Override
@@ -1255,6 +1349,10 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         sendComplete(result);
       }
     }.execute(message);
+  }
+
+  private boolean isXmppType(Type type) {
+    return type == Type.SECURE_XMPP || type == Type.SECURE_XMPP_OFFLINE;
   }
 
   private void updateToggleButtonState() {

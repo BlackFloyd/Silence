@@ -74,6 +74,8 @@ public class MultipartSmsMessageHandler {
       return new IncomingPreKeyBundleMessage(message.getBaseMessage(), strippedMessage);
     } else if (message.getWireType() == MultipartSmsTransportMessage.WIRETYPE_END_SESSION) {
       return new IncomingEndSessionMessage(message.getBaseMessage(), strippedMessage);
+    } else if (message.getWireType() == MultipartSmsTransportMessage.WIRETYPE_XMPP_EXCHANGE) {
+      return new IncomingXmppExchangeMessage(message.getBaseMessage(), strippedMessage);
     } else {
       return new IncomingEncryptedMessage(message.getBaseMessage(), strippedMessage);
     }
@@ -92,9 +94,9 @@ public class MultipartSmsMessageHandler {
     }
   }
 
-  public synchronized ArrayList<String> divideMessage(OutgoingTextMessage message) {
+  public synchronized ArrayList<String> divideMessage(OutgoingTextMessage message, boolean isXmpp) {
     String number     = message.getRecipients().getPrimaryRecipient().getNumber();
     byte   identifier = MultipartSmsIdentifier.getInstance().getIdForRecipient(number);
-    return MultipartSmsTransportMessage.getEncoded(message, identifier);
+    return MultipartSmsTransportMessage.getEncoded(message, identifier, isXmpp);
   }
 }
