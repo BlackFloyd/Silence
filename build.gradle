@@ -117,15 +117,15 @@ dependencyVerification {
 }
 
 android {
-    compileSdkVersion 23
-    buildToolsVersion '23.0.3'
+    compileSdkVersion 22
+    buildToolsVersion '22.0.1'
 
     defaultConfig {
         versionCode 123
         versionName "0.14.3"
 
         minSdkVersion 9
-        targetSdkVersion 23
+        targetSdkVersion 22
 
         try{
             buildConfigField "String", "BUILD_GIT_COMMIT", "\"" + 'git rev-parse --short HEAD'.execute().text.trim() + "\""
