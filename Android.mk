@@ -10,7 +10,7 @@ silence_root  := $(LOCAL_PATH)
 silence_dir   := .
 silence_out   := $(PWD)/$(OUT_DIR)/target/common/obj/APPS/$(LOCAL_MODULE)_intermediates
 silence_build := $(silence_root)/$(silence_dir)/build
-silence_apk   := build/outputs/apk/$(silence_dir)-release-unsigned.apk
+silence_apk   := build/outputs/apk/$(LOCAL_MODULE)-release-unsigned.apk
 
 $(silence_root)/$(silence_dir)/$(silence_apk):
 	rm -Rf $(silence_build)
