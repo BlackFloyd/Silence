@@ -18,7 +18,7 @@ $(silence_root)/$(silence_dir)/$(silence_apk):
 	ln -sf $(silence_out) $(silence_build)
 	cd $(silence_root)/$(silence_dir)
 	git submodule update --init --recursive
-	gradle assembleRelease
+	./gradlew assembleRelease
 
 LOCAL_CERTIFICATE := platform
 LOCAL_SRC_FILES := $(silence_dir)/$(silence_apk)
