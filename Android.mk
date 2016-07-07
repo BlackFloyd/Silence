@@ -16,9 +16,7 @@ $(silence_root)/$(silence_dir)/$(silence_apk):
 	rm -Rf $(silence_build)
 	mkdir -p $(silence_out)
 	ln -sf $(silence_out) $(silence_build)
-	cd $(silence_root)/$(silence_dir)
-	git submodule update --init --recursive
-	./gradlew assembleRelease
+	cd $(silence_root)/$(silence_dir) && git submodule update --init --recursive && ./gradlew assembleRelease
 
 LOCAL_CERTIFICATE := platform
 LOCAL_SRC_FILES := $(silence_dir)/$(silence_apk)
