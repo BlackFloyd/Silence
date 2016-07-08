@@ -13,7 +13,6 @@ silence_build := $(silence_root)/$(silence_dir)/build
 silence_apk   := build/outputs/apk/$(LOCAL_MODULE)-release-unsigned.apk
 
 $(silence_root)/$(silence_dir)/$(silence_apk):
-	rm -Rf $(silence_build)
 	mkdir -p $(silence_out)
 	ln -sf $(silence_out) $(silence_build)
 	cd $(silence_root)/$(silence_dir) && git submodule update --init --recursive && ./gradlew assembleRelease
